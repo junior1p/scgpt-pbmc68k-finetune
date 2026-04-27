@@ -133,14 +133,53 @@ python real_pbmc68k_finetune.py \
 
 The script will create a timestamped run directory under `./runs/` unless `--run-dir` is specified.
 
+### 3. Run the paper-style benchmark suite
+
+```bash
+bash scripts/run_benchmark.sh --datasets pbmc68k_reduced paul15 --seeds 0 1 2
+```
+
+This will run:
+- scGPT fine-tuning on each dataset and seed
+- baseline methods (`pca_logreg`, `pca_svm`, `pca_knn`, `leiden`)
+- UMAP / ARI / NMI / marker-gene analysis for each produced run
+
 ## Files of interest
 
 - `real_pbmc68k_finetune.py` — the real-data fine-tuning entry point
+- `benchmark_runner.py` — multi-dataset, multi-seed benchmark orchestrator
+- `benchmark_baselines.py` — baseline comparison methods
+- `benchmark_analysis.py` — UMAP / ARI / NMI / marker-gene analysis
 - `quick_scgpt_train.py` — the earlier smoke-test script
 - `runs/pbmc68k_scgpt_finetune_20260427_195037/summary.json` — final summary
 - `runs/pbmc68k_scgpt_finetune_20260427_195037/final_test.json` — final test result
 - `runs/pbmc68k_scgpt_finetune_20260427_195037/logs/train.log` — full training log
 - `runs/pbmc68k_scgpt_finetune_20260427_195037/checkpoints/` — checkpoint artifacts
+
+## Benchmark suite
+
+The repository now includes a paper-style benchmark workflow under:
+
+- `experiments/`
+- `configs/benchmark.yaml`
+- `scripts/run_benchmark.sh`
+- `docs/benchmark.md`
+
+Supported public datasets currently include:
+
+- `pbmc68k_reduced`
+- `paul15`
+- `pbmc3k_processed`
+
+Supported methods currently include:
+
+- `scgpt`
+- `pca_logreg`
+- `pca_svm`
+- `pca_knn`
+- `leiden`
+
+The benchmark runner is designed to produce per-run analysis inputs, UMAP plots, ARI/NMI metrics, and marker-gene summaries.
 
 ## Notes
 
@@ -150,4 +189,4 @@ The script will create a timestamped run directory under `./runs/` unless `--run
 
 ## License
 
-No explicit license has been added yet. Please add one if you want to distribute or reuse the code and artifacts publicly.
+This repository is licensed under the MIT License. See `LICENSE`.

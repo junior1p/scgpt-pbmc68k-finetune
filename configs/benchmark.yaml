@@ -1,0 +1,29 @@
+# Benchmark configuration for paper-style experiments
+
+datasets:
+  - pbmc68k_reduced
+  - paul15
+
+seeds:
+  - 0
+  - 1
+  - 2
+
+methods:
+  - scgpt
+  - pca_logreg
+  - pca_svm
+  - pca_knn
+  - leiden
+
+scgpt:
+  epochs: 5
+  batch_size: 128
+  lr: 0.0005
+  hvg: 128
+  n_bins: 51
+
+analysis:
+  embedding_key: X_scGPT
+  true_label_key: true_label
+  pred_label_key: pred_label

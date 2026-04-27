@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Dict, Tuple
 
 import numpy as np
+import pandas as pd
 import scanpy as sc
 import torch
 from anndata import AnnData
@@ -74,6 +75,9 @@ class RunConfig:
     max_grad_norm: float = 1.0
     num_workers: int = 0
     run_dir: str = ""
+    dataset: str = "pbmc68k_reduced"
+    label_key: str = ""
+    analysis: bool = False
 
 
 class SeqDataset(Dataset):
@@ -106,13 +110,27 @@ def setup_logger(log_file: Path) -> logging.Logger:
     return logger
 
 
-def load_and_preprocess(config: RunConfig, logger: logging.Logger) -> Tuple[AnnData, np.ndarray, np.ndarray]:
-    logger.info("Loading PBMC68k reduced dataset from scanpy...")
-    adata = sc.datasets.pbmc68k_reduced()
-    celltype = adata.obs["bulk_labels"].astype("category")
+DATASET_REGISTRY = {
+    "pbmc68k_reduced": {"loader": sc.datasets.pbmc68k_reduced, "label_key": "bulk_labels"},
+    "paul15": {"loader": sc.datasets.paul15, "label_key": "paul15_clusters"},
+    "pbmc3k_processed": {"loader": sc.datasets.pbmc3k_processed, "label_key": "louvain"},
+}
+
+
+def load_and_preprocess(config: RunConfig, logger: logging.Logger) -> Tuple[AnnData, np.ndarray, np.ndarray, str]:
+    if config.dataset not in DATASET_REGISTRY:
+        raise ValueError(f"Unknown dataset '{config.dataset}'. Available: {sorted(DATASET_REGISTRY)}")
+    spec = DATASET_REGISTRY[config.dataset]
+    label_key = config.label_key or spec["label_key"]
+    logger.info("Loading %s dataset from scanpy...", config.dataset)
+    adata = spec["loader"]()
+    if adata.raw is not None:
+        raw = adata.raw.to_adata()
+    else:
+        raw = adata.copy()
+    celltype = raw.obs[label_key].astype("category")
 
     # Use the raw layer, which holds non-negative expression values suitable for scGPT.
-    raw = adata.raw.to_adata()
     raw.obs["celltype"] = celltype
     raw.obs["celltype_id"] = celltype.cat.codes.astype(np.int64)
     raw.var["gene_name"] = raw.var_names.astype(str)
@@ -132,7 +150,7 @@ def load_and_preprocess(config: RunConfig, logger: logging.Logger) -> Tuple[AnnD
     preprocessor(raw)
 
     # Save exact preprocessed data for reproducibility.
-    return raw, raw.layers["X_binned"], raw.obs["celltype_id"].to_numpy()
+    return raw, raw.layers["X_binned"], raw.obs["celltype_id"].to_numpy(), label_key
 
 
 def build_vocab(genes: list[str], out_dir: Path) -> GeneVocab:
@@ -298,6 +316,39 @@ def save_checkpoint(
     torch.save(payload, path)
 
 
+def collect_embeddings(model, loader, device, pad_id: int):
+    model.eval()
+    cell_embs = []
+    pred_ids = []
+    for batch in loader:
+        gene_ids = batch["gene_ids"].to(device)
+        values = batch["values"].to(device)
+        mask = gene_ids.eq(pad_id)
+        out = model(gene_ids, values, src_key_padding_mask=mask, CLS=True)
+        cell_embs.append(out["cell_emb"].detach().cpu())
+        pred_ids.append(out["cls_output"].argmax(dim=1).detach().cpu())
+    return torch.cat(cell_embs, dim=0).numpy(), torch.cat(pred_ids, dim=0).numpy()
+
+
+def export_analysis_artifacts(run_dir: Path, raw: AnnData, embeddings: np.ndarray, pred_ids: np.ndarray, label_key: str, config: RunConfig) -> None:
+    analysis_dir = run_dir / "analysis"
+    analysis_dir.mkdir(exist_ok=True)
+    adata = raw.copy()
+    adata.obsm["X_scGPT"] = embeddings
+    true_labels = adata.obs[label_key].astype("category")
+    adata.obs["true_label"] = true_labels
+    adata.obs["pred_label"] = pd.Categorical.from_codes(pred_ids, categories=true_labels.cat.categories)
+    adata.write_h5ad(analysis_dir / "analysis_input.h5ad")
+    payload = {
+        "embedding_key": "X_scGPT",
+        "label_key": label_key,
+        "n_cells": int(adata.n_obs),
+        "n_genes": int(adata.n_vars),
+        "seed": config.seed,
+    }
+    (analysis_dir / "analysis_meta.json").write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
 def dump_environment(run_dir: Path) -> None:
     freeze = subprocess.check_output([sys.executable, "-m", "pip", "freeze"], text=True)
     (run_dir / "requirements.txt").write_text(freeze, encoding="utf-8")
@@ -306,6 +357,9 @@ def dump_environment(run_dir: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Real-data scGPT fine-tuning on PBMC68k reduced")
     parser.add_argument("--run-dir", default="", help="Output directory. Default: timestamped run dir under ./runs")
+    parser.add_argument("--dataset", default="pbmc68k_reduced", choices=sorted(DATASET_REGISTRY.keys()))
+    parser.add_argument("--label-key", default="")
+    parser.add_argument("--analysis", action="store_true")
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--lr", type=float, default=5e-4)
@@ -348,6 +402,9 @@ def main() -> None:
         val_size=args.val_size,
         num_workers=args.num_workers,
         run_dir=args.run_dir,
+        dataset=args.dataset,
+        label_key=args.label_key,
+        analysis=args.analysis,
     )
 
     set_seed(config.seed)
@@ -364,7 +421,7 @@ def main() -> None:
     shutil.copy2(Path(__file__).resolve(), run_dir / "script.py")
     (run_dir / "args.json").write_text(json.dumps(asdict(config), indent=2, sort_keys=True), encoding="utf-8")
 
-    raw, _, labels = load_and_preprocess(config, logger)
+    raw, _, labels, label_key = load_and_preprocess(config, logger)
     raw.write_h5ad(run_dir / "data" / "preprocessed_data.h5ad")
 
     genes = raw.var["gene_name"].tolist()
@@ -400,6 +457,12 @@ def main() -> None:
     train_loader = make_loader(train_data, config.batch_size, True, config.num_workers)
     val_loader = make_loader(val_data, config.batch_size, False, config.num_workers)
     test_loader = make_loader(test_data, config.batch_size, False, config.num_workers)
+    all_data = {
+        "gene_ids": all_genes,
+        "values": all_values,
+        "celltype": labels_tensor,
+    }
+    all_loader = make_loader(all_data, config.batch_size, False, config.num_workers)
 
     device = torch.device("cpu")
     n_classes = int(labels_tensor.max().item()) + 1
@@ -488,6 +551,9 @@ def main() -> None:
 
     final_test = evaluate_cls(model, test_loader, device, pad_id)
     (run_dir / "final_test.json").write_text(json.dumps(final_test, indent=2, sort_keys=True), encoding="utf-8")
+    if config.analysis:
+        embeddings, pred_ids = collect_embeddings(model, all_loader, device, pad_id)
+        export_analysis_artifacts(run_dir, raw, embeddings, pred_ids, label_key, config)
     dump_environment(run_dir)
 
     summary = {
