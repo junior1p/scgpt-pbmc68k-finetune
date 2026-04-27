@@ -40,8 +40,15 @@ from torchtext._torchtext import Vocab as VocabPybind
 from torchtext.vocab import Vocab
 
 REPO_DIR = Path(__file__).resolve().parent
-if str(REPO_DIR) not in sys.path:
-    sys.path.insert(0, str(REPO_DIR))
+SCGPT_CANDIDATES = [
+    REPO_DIR,
+    REPO_DIR.parent,
+    Path("/mnt/scgpt_trial"),
+    Path("/mnt/scgpt_trial/scgpt_trial"),
+]
+for candidate in SCGPT_CANDIDATES:
+    if candidate.exists() and str(candidate) not in sys.path:
+        sys.path.insert(0, str(candidate))
 
 import scgpt as scg
 from scgpt.loss import masked_mse_loss

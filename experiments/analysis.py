@@ -42,10 +42,21 @@ def save_umap_plot(adata: AnnData, out_path: Path, color: str, title: str) -> No
 
 
 def compute_marker_summary(adata: AnnData, groupby: str, n_top: int = 10) -> pd.DataFrame:
-    sc.tl.rank_genes_groups(adata, groupby=groupby, method="wilcoxon")
+    counts = adata.obs[groupby].value_counts()
+    valid_groups = counts[counts >= 2].index
+    if len(valid_groups) == 0:
+        return pd.DataFrame(columns=["group", "rank", "gene", "score", "pval_adj"])
+
+    ad = adata[adata.obs[groupby].isin(valid_groups)].copy()
+    ad.obs[groupby] = ad.obs[groupby].astype("category")
+    try:
+        sc.tl.rank_genes_groups(ad, groupby=groupby, method="wilcoxon")
+    except ValueError:
+        return pd.DataFrame(columns=["group", "rank", "gene", "score", "pval_adj"])
+
     frames = []
-    for group in adata.obs[groupby].cat.categories:
-        df = sc.get.rank_genes_groups_df(adata, group=str(group)).head(n_top).copy()
+    for group in ad.obs[groupby].cat.categories:
+        df = sc.get.rank_genes_groups_df(ad, group=str(group)).head(n_top).copy()
         df.insert(0, "group", str(group))
         df.insert(1, "rank", range(1, len(df) + 1))
         frames.append(df[["group", "rank", "names", "scores", "pvals_adj"]].rename(columns={"names": "gene", "scores": "score", "pvals_adj": "pval_adj"}))
