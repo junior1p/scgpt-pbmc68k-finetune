@@ -1,0 +1,23 @@
+{
+  "batch_size": 128,
+  "cls_weight": 1.0,
+  "d_hid": 128,
+  "d_model": 64,
+  "dropout": 0.2,
+  "epochs": 5,
+  "hvg": 128,
+  "lr": 0.0005,
+  "mask_ratio": 0.15,
+  "max_grad_norm": 1.0,
+  "mlm_weight": 1.0,
+  "n_bins": 51,
+  "nhead": 4,
+  "nlayers": 2,
+  "nlayers_cls": 2,
+  "num_workers": 0,
+  "run_dir": "",
+  "seed": 42,
+  "test_size": 0.15,
+  "val_size": 0.15,
+  "weight_decay": 0.01
+}

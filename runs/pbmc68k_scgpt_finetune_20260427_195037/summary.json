@@ -1,0 +1,10 @@
+{
+  "best_epoch": 5,
+  "best_val_acc": 0.34285714285714286,
+  "best_val_loss": 794.4338989257812,
+  "final_test": {
+    "accuracy": 0.34285714285714286,
+    "cls_loss": 1.9761472940444946
+  },
+  "run_dir": "/mnt/scgpt_trial/runs/pbmc68k_scgpt_finetune_20260427_195037"
+}

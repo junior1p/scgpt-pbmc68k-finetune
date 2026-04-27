@@ -1,0 +1,48 @@
+19:50:37-scGPT-INFO-main: Run directory: /mnt/scgpt_trial/runs/pbmc68k_scgpt_finetune_20260427_195037
+19:50:37-scGPT-INFO-main: Configuration: {
+  "batch_size": 128,
+  "cls_weight": 1.0,
+  "d_hid": 128,
+  "d_model": 64,
+  "dropout": 0.2,
+  "epochs": 5,
+  "hvg": 128,
+  "lr": 0.0005,
+  "mask_ratio": 0.15,
+  "max_grad_norm": 1.0,
+  "mlm_weight": 1.0,
+  "n_bins": 51,
+  "nhead": 4,
+  "nlayers": 2,
+  "nlayers_cls": 2,
+  "num_workers": 0,
+  "run_dir": "",
+  "seed": 42,
+  "test_size": 0.15,
+  "val_size": 0.15,
+  "weight_decay": 0.01
+}
+19:50:37-scGPT-INFO-load_and_preprocess: Loading PBMC68k reduced dataset from scanpy...
+19:50:37-scGPT-INFO-load_and_preprocess: Preprocessing: HVG selection + binning
+19:50:37-scGPT-INFO-__call__: Subsetting highly variable genes ...
+19:50:37-scGPT-WARNING-__call__: No batch_key is provided, will use all cells for HVG selection.
+19:50:38-scGPT-INFO-__call__: Binning data ...
+19:53:30-scGPT-INFO-main: epoch=1 train_loss=814.5787 train_cls=2.4144 train_mlm=812.1643 val_cls=2.1936 val_acc=0.1810 val_mlm=842.4033 test_acc=0.2095 elapsed=170.8s
+19:53:30-scGPT-INFO-main: New best checkpoint at epoch 1: val_acc=0.1810
+19:56:19-scGPT-INFO-main: epoch=2 train_loss=789.9763 train_cls=2.1982 train_mlm=787.7781 val_cls=2.0866 val_acc=0.3429 val_mlm=814.1540 test_acc=0.3429 elapsed=168.7s
+19:56:19-scGPT-INFO-main: New best checkpoint at epoch 2: val_acc=0.3429
+19:59:08-scGPT-INFO-main: epoch=3 train_loss=774.1734 train_cls=2.1044 train_mlm=772.0690 val_cls=2.0386 val_acc=0.3429 val_mlm=805.2653 test_acc=0.3429 elapsed=168.4s
+19:59:08-scGPT-INFO-main: New best checkpoint at epoch 3: val_acc=0.3429
+20:01:58-scGPT-INFO-main: epoch=4 train_loss=777.5968 train_cls=2.0529 train_mlm=775.5439 val_cls=2.0019 val_acc=0.3429 val_mlm=807.7766 test_acc=0.3429 elapsed=170.6s
+20:04:47-scGPT-INFO-main: epoch=5 train_loss=750.5185 train_cls=2.0076 train_mlm=748.5109 val_cls=1.9727 val_acc=0.3429 val_mlm=792.4612 test_acc=0.3429 elapsed=168.5s
+20:04:47-scGPT-INFO-main: New best checkpoint at epoch 5: val_acc=0.3429
+20:05:24-scGPT-INFO-main: Summary: {
+  "best_epoch": 5,
+  "best_val_acc": 0.34285714285714286,
+  "best_val_loss": 794.4338989257812,
+  "final_test": {
+    "accuracy": 0.34285714285714286,
+    "cls_loss": 1.9761472940444946
+  },
+  "run_dir": "/mnt/scgpt_trial/runs/pbmc68k_scgpt_finetune_20260427_195037"
+}
