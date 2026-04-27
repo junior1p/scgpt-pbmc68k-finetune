@@ -21,7 +21,10 @@ The goal of this project is to document a small but complete real-data fine-tuni
 
 ```text
 .
+├── LICENSE
 ├── README.md
+├── environment.yml
+├── requirements.txt
 ├── quick_scgpt_train.py
 ├── real_pbmc68k_finetune.py
 └── runs/
@@ -89,17 +92,19 @@ Final metrics from the archived successful run:
 
 ### 1. Install dependencies
 
-This project assumes an environment with the following core packages available:
+The repository now includes both:
 
-- `torch`
-- `scanpy`
-- `anndata`
-- `scgpt`
-- `numpy`
-- `pandas`
-- `scikit-learn`
+- `requirements.txt` for pip-based installs
+- `environment.yml` for conda-based setup
 
-Exact versions may vary depending on your environment.
+Example conda workflow:
+
+```bash
+conda env create -f environment.yml
+conda activate scgpt-pbmc68k
+```
+
+Then install the upstream `scGPT` source that matches the archived run. The package is not vendored in this repository.
 
 ### 2. Launch the fine-tuning script
 
