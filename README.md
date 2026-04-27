@@ -38,7 +38,9 @@ The project is organized the way we would write an appendix for a short methods 
 │   ├── __init__.py
 │   ├── analysis.py
 │   ├── datasets.py
+│   ├── label_transfer.py
 │   └── metrics.py
+├── label_transfer_finetune.py
 ├── quick_scgpt_train.py
 ├── real_pbmc68k_finetune.py
 ├── requirements.txt
@@ -118,6 +120,12 @@ The benchmark suite is designed to run:
 - `pbmc68k_reduced` with `bulk_labels`
 - `paul15` with `paul15_clusters`
 - `pbmc3k_processed` with `louvain`
+- `gutatlas_transfer` for cross-dataset cell type annotation
+
+The annotation track uses the CellTypist gut-atlas pair:
+- reference: `Elmentaite` / `Integrated_05`
+- query: `James` / `cell_type`
+- shared-label filtering keeps the benchmark in a true label-transfer setting
 
 ### Supported methods
 
@@ -185,10 +193,16 @@ python real_pbmc68k_finetune.py \
 ### 3. Re-run the benchmark suite
 
 ```bash
-bash scripts/run_benchmark.sh --datasets pbmc68k_reduced paul15 --seeds 0 1 2
+bash scripts/run_benchmark.sh --mode auto --datasets pbmc68k_reduced paul15 gutatlas_transfer --seeds 0 1 2
 ```
 
 This runs scGPT, baselines, and analysis for each dataset/seed combination.
+
+For the annotation-only track:
+
+```bash
+bash scripts/run_benchmark.sh --mode annotation --datasets gutatlas_transfer --seeds 0 1 2
+```
 
 ## Appendix A. Experimental setup
 

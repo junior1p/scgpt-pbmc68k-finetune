@@ -9,11 +9,11 @@ import subprocess
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Iterable
 
 
 REPO_ROOT = Path(__file__).resolve().parent
 SCGPT_SCRIPT = REPO_ROOT / "real_pbmc68k_finetune.py"
+ANNOTATION_SCRIPT = REPO_ROOT / "label_transfer_finetune.py"
 BASELINE_SCRIPT = REPO_ROOT / "benchmark_baselines.py"
 ANALYSIS_SCRIPT = REPO_ROOT / "benchmark_analysis.py"
 
@@ -30,10 +30,11 @@ def ensure_dir(path: Path) -> Path:
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Paper-style benchmark runner for scGPT experiments")
+    parser.add_argument("--mode", choices=["auto", "single", "annotation"], default="auto")
     parser.add_argument("--datasets", nargs="*", default=["pbmc68k_reduced", "paul15"])
     parser.add_argument("--seeds", nargs="*", type=int, default=[0, 1, 2])
     parser.add_argument("--output-root", default=str(REPO_ROOT / "runs" / "benchmark"))
-    parser.add_argument("--methods", nargs="*", default=["scgpt", "pca_logreg", "pca_svm", "pca_knn", "leiden"])
+    parser.add_argument("--methods", nargs="*", default=["scgpt", "pca_logreg", "pca_svm", "pca_knn", "leiden", "majority_class"])
     parser.add_argument("--scgpt-epochs", type=int, default=5)
     parser.add_argument("--scgpt-batch-size", type=int, default=128)
     parser.add_argument("--scgpt-lr", type=float, default=5e-4)
@@ -79,6 +80,10 @@ def write_summary(rows: list[dict], out_dir: Path) -> None:
     (out_dir / "summary.json").write_text(json.dumps(rows, indent=2, sort_keys=True), encoding="utf-8")
 
 
+def is_annotation_dataset(dataset: str) -> bool:
+    return dataset in {"gutatlas_transfer"}
+
+
 def main() -> None:
     args = parse_args()
     output_root = ensure_dir(Path(args.output_root))
@@ -86,12 +91,16 @@ def main() -> None:
 
     for dataset in args.datasets:
         for seed in args.seeds:
+            paired = is_annotation_dataset(dataset)
+            use_annotation = args.mode == "annotation" or (args.mode == "auto" and paired)
+            scgpt_script = ANNOTATION_SCRIPT if use_annotation else SCGPT_SCRIPT
+
             if "scgpt" in args.methods:
                 run_dir = output_root / dataset / "scgpt" / f"seed_{seed}"
                 ensure_dir(run_dir)
-                run_cmd([
+                cmd = [
                     sys.executable,
-                    str(SCGPT_SCRIPT),
+                    str(scgpt_script),
                     "--dataset", dataset,
                     "--seed", str(seed),
                     "--epochs", str(args.scgpt_epochs),
@@ -101,7 +110,8 @@ def main() -> None:
                     "--n-bins", str(args.n_bins),
                     "--run-dir", str(run_dir),
                     "--analysis",
-                ])
+                ]
+                run_cmd(cmd)
                 analysis_input = run_dir / "analysis" / "analysis_input.h5ad"
                 if analysis_input.exists():
                     run_cmd([
@@ -121,7 +131,7 @@ def main() -> None:
 
             baseline_dir = output_root / dataset / "baselines" / f"seed_{seed}"
             ensure_dir(baseline_dir)
-            if any(m in args.methods for m in ["pca_logreg", "pca_svm", "pca_knn", "leiden"]):
+            if any(m in args.methods for m in ["pca_logreg", "pca_svm", "pca_knn", "leiden", "majority_class"]):
                 run_cmd([
                     sys.executable,
                     str(BASELINE_SCRIPT),

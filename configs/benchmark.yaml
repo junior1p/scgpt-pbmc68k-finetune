@@ -3,11 +3,14 @@
 datasets:
   - pbmc68k_reduced
   - paul15
+  - gutatlas_transfer
 
 seeds:
   - 0
   - 1
   - 2
+
+mode: auto
 
 methods:
   - scgpt
@@ -15,6 +18,7 @@ methods:
   - pca_svm
   - pca_knn
   - leiden
+  - majority_class
 
 scgpt:
   epochs: 5

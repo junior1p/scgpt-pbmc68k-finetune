@@ -15,7 +15,9 @@ This repository now contains a lightweight benchmark framework for scGPT fine-tu
 │   ├── __init__.py
 │   ├── analysis.py
 │   ├── datasets.py
+│   ├── label_transfer.py
 │   └── metrics.py
+├── label_transfer_finetune.py  # cross-dataset annotation / label transfer entry point
 ├── real_pbmc68k_finetune.py    # scGPT fine-tuning entry point (supports multiple datasets)
 ├── scripts/
 │   └── run_benchmark.sh        # convenience wrapper
@@ -31,6 +33,13 @@ The benchmark runner currently supports these public Scanpy datasets:
 - `pbmc68k_reduced` with `bulk_labels`
 - `paul15` with `paul15_clusters`
 - `pbmc3k_processed` with `louvain`
+- `gutatlas_transfer` for cross-dataset cell type annotation
+
+For the annotation track:
+
+- reference: CellTypist gut atlas `Elmentaite`
+- query: CellTypist gut atlas `James`
+- labels are harmonized by exact overlap before training
 
 ## Methods
 
@@ -56,5 +65,11 @@ Each run can produce:
 Run the full benchmark suite:
 
 ```bash
-bash scripts/run_benchmark.sh --datasets pbmc68k_reduced paul15 --seeds 0 1 2
+bash scripts/run_benchmark.sh --mode auto --datasets pbmc68k_reduced paul15 gutatlas_transfer --seeds 0 1 2
+```
+
+For the annotation track only:
+
+```bash
+bash scripts/run_benchmark.sh --mode annotation --datasets gutatlas_transfer --seeds 0 1 2
 ```

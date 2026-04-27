@@ -1,12 +1,22 @@
 """Shared helpers for scGPT benchmark-style experiments."""
 
 from .datasets import (
-    DATASET_REGISTRY,
     DatasetSpec,
+    PairedDatasetSpec,
+    SCGPT_DATASET_REGISTRY,
+    PAIRED_DATASET_REGISTRY,
     get_dataset_spec,
+    get_paired_dataset_spec,
+    harmonize_shared_labels,
+    intersect_genes,
+    is_paired_dataset,
     load_dataset,
+    load_paired_dataset,
     prepare_label_column,
     preprocess_for_baseline,
     preprocess_for_scgpt,
+    select_shared_hvgs,
+    subset_shared_genes,
 )
+from .label_transfer import TransferBundle, encode_labels, make_loader, prepare_transfer_bundle, split_reference_indices
 from .metrics import compute_label_metrics

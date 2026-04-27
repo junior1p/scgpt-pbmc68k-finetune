@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 import scanpy as sc
 from anndata import read_h5ad
+from sklearn.metrics import classification_report, confusion_matrix
 
 from experiments.analysis import build_analysis_adata, compute_marker_summary, run_umap, save_umap_plot, summarize_predictions
 
@@ -35,6 +36,19 @@ def main():
 
     metrics = summarize_predictions(adata, true_key="true_label", pred_key="pred_label")
     (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2, sort_keys=True), encoding="utf-8")
+
+    if "eval_split" in adata.obs:
+        subset = adata.obs["eval_split"] == "test"
+        obs = adata.obs.loc[subset]
+    else:
+        obs = adata.obs
+    y_true = obs["true_label"].astype(str)
+    y_pred = obs["pred_label"].astype(str)
+    labels = sorted(set(y_true.unique()).union(y_pred.unique()))
+    cm = confusion_matrix(y_true, y_pred, labels=labels)
+    pd.DataFrame(cm, index=labels, columns=labels).to_csv(out_dir / "confusion_matrix.csv")
+    report = classification_report(y_true, y_pred, labels=labels, output_dict=True, zero_division=0)
+    pd.DataFrame(report).T.to_csv(out_dir / "classification_report.csv")
 
     adata = run_umap(adata, embedding_key=args.embedding_key, random_state=args.seed)
     colors = args.umap_color or ["true_label", "pred_label"]
