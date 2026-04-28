@@ -1,0 +1,57 @@
+{
+  "leiden": {
+    "accuracy": 0.12380952380952381,
+    "ari": 0.5697270587138429,
+    "balanced_accuracy": 0.2785714285714286,
+    "dataset": "pbmc68k_reduced",
+    "macro_f1": 0.21844444444444444,
+    "method": "leiden",
+    "nmi": 0.7120793565371732,
+    "seed": 0,
+    "split": "test"
+  },
+  "majority_class": {
+    "accuracy": 0.34285714285714286,
+    "ari": 0.0,
+    "balanced_accuracy": 0.1,
+    "dataset": "pbmc68k_reduced",
+    "macro_f1": 0.05106382978723404,
+    "method": "majority_class",
+    "nmi": 0.0,
+    "seed": 0,
+    "split": "test"
+  },
+  "pca_knn": {
+    "accuracy": 0.7619047619047619,
+    "ari": 0.6143844370126044,
+    "balanced_accuracy": 0.5601984126984126,
+    "dataset": "pbmc68k_reduced",
+    "macro_f1": 0.5566327789857202,
+    "method": "pca_knn",
+    "nmi": 0.6833127440349043,
+    "seed": 0,
+    "split": "test"
+  },
+  "pca_logreg": {
+    "accuracy": 0.7619047619047619,
+    "ari": 0.5787819131138484,
+    "balanced_accuracy": 0.6597222222222221,
+    "dataset": "pbmc68k_reduced",
+    "macro_f1": 0.6514770275926464,
+    "method": "pca_logreg",
+    "nmi": 0.7209940419380747,
+    "seed": 0,
+    "split": "test"
+  },
+  "pca_svm": {
+    "accuracy": 0.6857142857142857,
+    "ari": 0.5188824910734391,
+    "balanced_accuracy": 0.6090873015873016,
+    "dataset": "pbmc68k_reduced",
+    "macro_f1": 0.5804878618113912,
+    "method": "pca_svm",
+    "nmi": 0.5818250793467741,
+    "seed": 0,
+    "split": "test"
+  }
+}

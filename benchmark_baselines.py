@@ -58,7 +58,7 @@ def ensure_dir(path: Path) -> Path:
 
 def run_supervised(method: str, X_train, y_train, X_eval):
     if method == "pca_logreg":
-        clf = LogisticRegression(max_iter=3000, multi_class="auto")
+        clf = LogisticRegression(max_iter=3000)
     elif method == "pca_svm":
         clf = LinearSVC()
     elif method == "pca_knn":

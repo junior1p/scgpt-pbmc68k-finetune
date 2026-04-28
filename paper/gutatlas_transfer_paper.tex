@@ -33,24 +33,23 @@
 \maketitle
 
 \begin{abstract}
-Cross-dataset cell type annotation is a stringent test of whether a representation model can move beyond within-dataset clustering and recover biological labels under domain shift.
-We turn a fragile smoke test into a benchmark-style human gut atlas transfer experiment using scGPT, with a paired reference/query setup derived from CellTypist-style annotations.
-The reference atlas contains 14{,}159 cells and the query atlas contains 11{,}982 cells; after harmonization, the task retains 9 shared labels and 128 shared genes.
-The current CPU-based training run completes five epochs with automatic checkpoint recovery and produces a full analysis bundle, including UMAP visualizations, label-transfer metrics, and marker summaries.
-Final query performance reaches 18.96\% accuracy, 16.64\% balanced accuracy, 11.65\% macro-F1, 3.47\% ARI, and 5.39\% NMI.
-The result is not yet competitive as a final benchmark claim, but it establishes a reproducible end-to-end pipeline that is ready for systematic scaling, multi-seed evaluation, and stronger baselines.
+We study cross-dataset cell type annotation under domain shift using scGPT on the human gut atlas.
+The task pairs a reference atlas of 14{,}159 cells with a 11{,}982-cell query atlas; after harmonization, 9 labels and 128 shared genes remain.
+We train a compact scGPT transformer for five epochs with checkpoint-resume support and evaluate query accuracy, balanced accuracy, macro-F1, ARI, and NMI.
+Final query performance is 18.96\% accuracy, 16.64\% balanced accuracy, 11.65\% macro-F1, 3.47\% ARI, and 5.39\% NMI.
+Although the current model is not yet a strong benchmark contender, the experiment establishes a reproducible end-to-end transfer pipeline with complete artifacts and a baseline reporting structure.
 \end{abstract}
 
 \section{Introduction}
-Cross-dataset cell type annotation asks a simple question with hard consequences: if a model learns a representation on one atlas, can it transfer that structure to another atlas with different batches, donors, and preprocessing histories?
-This is a more realistic test than a single-dataset classification split, because the model must bridge a genuine domain gap rather than interpolate within a near-identical distribution.
+Cross-dataset cell type annotation is a stringent test of representation learning in single-cell transcriptomics because the model must transfer labels across batches, donors, and experiments.
+This benchmark is more informative than a random within-dataset split because it measures whether the learned representation remains useful after a genuine domain shift.
 
-In this project we recast an initial smoke test into a benchmark-style transfer run on the human gut atlas.
-The goal is not to claim state-of-the-art performance, but to build a clean experimental scaffold for a paper-like benchmark: a fixed task definition, a deterministic preprocessing path, a recoverable training loop, a common evaluation protocol, and a result archive that can be extended with stronger baselines and more seeds.
+In this manuscript we convert an initial smoke test into a benchmark-style transfer study on the human gut atlas.
+Our objective is not to claim state-of-the-art accuracy, but to establish a reproducible protocol: a fixed task definition, deterministic preprocessing, recoverable training, standard metrics, and exportable analysis artifacts.
 
-The main contribution of this manuscript is operational rather than algorithmic.
+The main contribution is operational rather than algorithmic.
 We show that a scGPT-based transfer pipeline can be made restartable, auditable, and analysis-ready on a nontrivial cross-dataset annotation task.
-That matters because the failure mode of many pilot runs is not a weak metric, but a weak workflow: downloads break, checkpoints vanish, analysis exports fail, and the experiment cannot be repeated.
+That matters because the failure mode of many pilot runs is not weak performance alone, but a workflow that cannot be repeated, resumed, or inspected.
 Here the pipeline now survives those issues.
 
 \section{Related Work}
@@ -63,7 +62,7 @@ The paper-style benchmark framing is also deliberate.
 Instead of treating the result as a one-off fine-tuning run, we define a repeatable benchmark target with explicit artifacts, common metrics, and a baseline suite.
 That makes the output suitable for incremental research: the same protocol can absorb more seeds, stronger models, different gene-selection strategies, or additional transfer datasets without changing the reporting structure.
 
-\section{Benchmark Setup}
+\section{Methods}
 \subsection{Task definition}
 We consider a paired reference/query label-transfer problem on the human gut atlas.
 The model is trained on the reference atlas and evaluated on the query atlas after label harmonization.
@@ -231,11 +230,32 @@ Those limitations are not flaws in the manuscript; they are the point of the ben
 A useful benchmark should make the hard part visible.
 Here the hard part is that the model can recover structure, but it cannot yet convert that structure into highly accurate annotation across the atlas boundary.
 
+\subsection{Auxiliary baseline calibration on PBMC68k\_reduced}
+To verify the reporting stack and provide a concrete comparison table, we also ran the same baseline suite on \texttt{pbmc68k\_reduced}.
+These results are calibration numbers rather than the main gut-atlas claim, but they let the manuscript report a complete baseline table in a publication-style format.
+
+\begin{table}[H]
+\centering
+\caption{Auxiliary baseline calibration on PBMC68k\_reduced (seed 0).}
+\label{tab:pbmc-baselines}
+\begin{tabular}{lccccc}
+\toprule
+Method & Accuracy & Balanced acc. & Macro-F1 & ARI & NMI \\
+\midrule
+Majority class & 0.3429 & 0.1000 & 0.0511 & 0.0000 & 0.0000 \\
+PCA + logistic regression & 0.7619 & 0.6597 & 0.6515 & 0.5788 & 0.7210 \\
+PCA + linear SVM & 0.6857 & 0.6091 & 0.5805 & 0.5189 & 0.5818 \\
+PCA + kNN & 0.7619 & 0.5602 & 0.5566 & 0.6144 & 0.6833 \\
+Leiden clustering & 0.1238 & 0.2786 & 0.2184 & 0.5697 & 0.7121 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \section{Limitations and Future Work}
 The next revision of this benchmark should add several elements:
 \begin{itemize}[leftmargin=1.2em]
   \item multiple random seeds with mean and standard deviation;
-  \item the full baseline table with metrics for each method;
+  \item the full gut-atlas baseline table with metrics for each method;
   \item ablation studies on gene selection and binning;
   \item a stronger transfer objective or regularization strategy;
   \item a clearer comparison to classical label-transfer systems.
@@ -255,8 +275,8 @@ The main analysis artifacts are:
   \item \texttt{analysis/analysis\_input.h5ad}
   \item \texttt{analysis/umap\_true\_label.png}
   \item \texttt{analysis/umap\_pred\_label.png}
+  \item \texttt{paper/baselines/pbmc68k\_seed0/summary.json}
 \end{itemize}
-
 Run directory:
 \begin{quote}
 \url{runs/annotation_smoke_retry2/gutatlas_transfer/scgpt/seed_0}

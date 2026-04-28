@@ -1,0 +1,11 @@
+{
+  "accuracy": 0.34285714285714286,
+  "ari": 0.0,
+  "balanced_accuracy": 0.1,
+  "dataset": "pbmc68k_reduced",
+  "macro_f1": 0.05106382978723404,
+  "method": "majority_class",
+  "nmi": 0.0,
+  "seed": 0,
+  "split": "test"
+}
