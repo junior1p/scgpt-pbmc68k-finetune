@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Tuple
+from urllib import error, request
+import os
+import shutil
+import time
 
 import numpy as np
 import pandas as pd
@@ -63,14 +68,124 @@ def _cache_path(filename: str) -> Path:
     return cache_dir / filename
 
 
+def _remote_total_size(url: str) -> int:
+    req = request.Request(url, headers={"Range": "bytes=0-0"})
+    with request.urlopen(req, timeout=120) as resp:
+        content_range = resp.headers.get("Content-Range")
+        if content_range and "/" in content_range:
+            return int(content_range.rsplit("/", 1)[1])
+        content_length = resp.headers.get("Content-Length")
+        if content_length is not None:
+            return int(content_length)
+    raise RuntimeError(f"Unable to determine remote file size for {url}")
+
+
+
+def _download_range(url: str, part_path: Path, start: int, end: int, max_attempts: int = 5) -> None:
+    expected = end - start + 1
+    last_error: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        existing = part_path.stat().st_size if part_path.exists() else 0
+        if existing > expected:
+            part_path.unlink(missing_ok=True)
+            existing = 0
+        if existing == expected:
+            return
+        download_start = start + existing
+        headers = {"Range": f"bytes={download_start}-{end}"}
+        req = request.Request(url, headers=headers)
+        mode = "ab" if existing else "wb"
+        try:
+            with request.urlopen(req, timeout=120) as resp, part_path.open(mode) as fh:
+                while True:
+                    chunk = resp.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+            actual = part_path.stat().st_size
+            if actual != expected:
+                raise error.ContentTooShortError(
+                    f"segment {start}-{end} incomplete: got {actual} bytes, expected {expected} bytes"
+                )
+            return
+        except (error.ContentTooShortError, OSError, TimeoutError, error.URLError) as exc:
+            last_error = exc
+            if attempt == max_attempts:
+                raise
+            time.sleep(min(30, 2 ** attempt))
+    if last_error is not None:
+        raise last_error
+
+
+
+def _download_with_resume(url: str, tmp_path: Path, max_attempts: int = 3, n_parts: int = 8) -> None:
+    total_size = _remote_total_size(url)
+    part_count = max(1, min(n_parts, total_size // (256 * 1024 * 1024) + 1))
+    part_size = (total_size + part_count - 1) // part_count
+    part_paths = [tmp_path.with_suffix(tmp_path.suffix + f".part{i}") for i in range(part_count)]
+    last_error: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with ThreadPoolExecutor(max_workers=part_count) as pool:
+                futures = []
+                for i in range(part_count):
+                    start = i * part_size
+                    end = min(total_size - 1, (i + 1) * part_size - 1)
+                    if start > end:
+                        continue
+                    futures.append(pool.submit(_download_range, url, part_paths[i], start, end))
+                for future in as_completed(futures):
+                    future.result()
+            with tmp_path.open("wb") as out_fh:
+                for part in part_paths:
+                    with part.open("rb") as in_fh:
+                        shutil.copyfileobj(in_fh, out_fh, length=1024 * 1024)
+            actual_size = tmp_path.stat().st_size
+            if actual_size != total_size:
+                raise error.ContentTooShortError(
+                    f"assembled file incomplete: got {actual_size} bytes, expected {total_size} bytes"
+                )
+            for part in part_paths:
+                part.unlink(missing_ok=True)
+            return
+        except Exception as exc:
+            last_error = exc
+            if attempt == max_attempts:
+                raise
+            time.sleep(min(30, 2 ** attempt))
+    if last_error is not None:
+        raise last_error
+
+
+def _safe_cached_h5ad(cache_name: str, url: str) -> AnnData:
+    cache_path = _cache_path(cache_name)
+    if cache_path.exists():
+        try:
+            return sc.read_h5ad(cache_path)
+        except OSError:
+            cache_path.unlink(missing_ok=True)
+    tmp_path = cache_path.with_suffix(cache_path.suffix + ".download")
+    if tmp_path.exists():
+        tmp_path.unlink()
+    try:
+        _download_with_resume(url, tmp_path)
+        adata = sc.read_h5ad(tmp_path)
+        os.replace(tmp_path, cache_path)
+        return adata
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise
+
+
 def _load_celltypist_gut_reference() -> AnnData:
     url = "https://cellgeni.cog.sanger.ac.uk/gutcellatlas/Full_obj_raw_counts_nosoupx.h5ad"
-    return sc.read(_cache_path("gut_cell_atlas_Elmentaite.h5ad"), backup_url=url)
+    return _safe_cached_h5ad("gut_cell_atlas_Elmentaite.h5ad", url)
 
 
 def _load_celltypist_gut_query() -> AnnData:
     url = "https://cellgeni.cog.sanger.ac.uk/gutcellatlas/Colon_cell_atlas.h5ad"
-    return sc.read(_cache_path("gut_cell_atlas_James.h5ad"), backup_url=url)
+    return _safe_cached_h5ad("gut_cell_atlas_James.h5ad", url)
 
 
 PAIRED_DATASET_REGISTRY: Dict[str, PairedDatasetSpec] = {
@@ -178,8 +293,18 @@ def select_shared_hvgs(reference: AnnData, query: AnnData, n_hvg: int) -> List[s
     sc.pp.normalize_total(ref, target_sum=1e4)
     sc.pp.log1p(ref)
     top_n = min(n_hvg, ref.n_vars)
-    sc.pp.highly_variable_genes(ref, n_top_genes=top_n, flavor="cell_ranger")
-    candidate_genes = [gene for gene, keep in zip(ref.var_names.astype(str), ref.var["highly_variable"].to_numpy()) if keep]
+    try:
+        sc.pp.highly_variable_genes(ref, n_top_genes=top_n, flavor="cell_ranger")
+        candidate_genes = [
+            gene for gene, keep in zip(ref.var_names.astype(str), ref.var["highly_variable"].to_numpy()) if keep
+        ]
+    except ValueError:
+        # Some atlas pairs have degenerate mean-bin edges under cell_ranger. Fall back to a deterministic
+        # variance ranking so the benchmark can still proceed.
+        X = ref.X.toarray() if hasattr(ref.X, "toarray") else ref.X
+        variances = np.asarray(X.var(axis=0)).ravel()
+        order = np.argsort(-variances)
+        candidate_genes = [str(ref.var_names[i]) for i in order[:top_n]]
     query_genes = set(query.var_names.astype(str))
     shared = [gene for gene in candidate_genes if gene in query_genes]
     if len(shared) < min(top_n, len(candidate_genes)):

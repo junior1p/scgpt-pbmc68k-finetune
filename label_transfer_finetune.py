@@ -225,17 +225,37 @@ def train_one_epoch(model, loader, optimizer, device, pad_id: int, config: Trans
     }
 
 
-def save_checkpoint(path: Path, model, optimizer, epoch: int, best_val_acc: float, config: TransferConfig, extra: Dict[str, float] | None = None) -> None:
+def save_checkpoint(
+    path: Path,
+    model,
+    optimizer,
+    scheduler,
+    epoch: int,
+    best_val_acc: float,
+    config: TransferConfig,
+    extra: Dict[str, float] | None = None,
+) -> None:
     payload = {
         "epoch": epoch,
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
+        "scheduler_state_dict": scheduler.state_dict() if scheduler is not None else None,
         "best_val_acc": best_val_acc,
         "config": asdict(config),
     }
     if extra:
         payload.update(extra)
     torch.save(payload, path)
+
+
+def load_checkpoint(path: Path, model, optimizer=None, scheduler=None):
+    payload = torch.load(path, map_location="cpu")
+    model.load_state_dict(payload["model_state_dict"])
+    if optimizer is not None and "optimizer_state_dict" in payload:
+        optimizer.load_state_dict(payload["optimizer_state_dict"])
+    if scheduler is not None and payload.get("scheduler_state_dict"):
+        scheduler.load_state_dict(payload["scheduler_state_dict"])
+    return payload
 
 
 @torch.no_grad()
@@ -396,8 +416,26 @@ def main() -> None:
     best_val_acc = -1.0
     best_epoch = -1
     best_val_loss = float("inf")
+    start_epoch = 1
+    last_checkpoint = run_dir / "checkpoints" / "last_checkpoint.pt"
+    if last_checkpoint.exists():
+        checkpoint = load_checkpoint(last_checkpoint, model, optimizer=optimizer, scheduler=scheduler)
+        start_epoch = int(checkpoint.get("epoch", 0)) + 1
+        best_val_acc = float(checkpoint.get("best_val_acc", best_val_acc))
+        best_epoch = int(checkpoint.get("best_epoch", checkpoint.get("epoch", -1)))
+        best_val_loss = float(checkpoint.get("best_val_loss", best_val_loss))
+        logger.info(
+            "Resumed from %s at epoch %d (best_epoch=%d best_val_acc=%.4f); next epoch=%d",
+            last_checkpoint,
+            int(checkpoint.get("epoch", 0)),
+            best_epoch,
+            best_val_acc,
+            start_epoch,
+        )
+    else:
+        logger.info("No last checkpoint found; starting training from scratch")
 
-    for epoch in range(1, config.epochs + 1):
+    for epoch in range(start_epoch, config.epochs + 1):
         epoch_start = time.time()
         train_metrics = train_one_epoch(model, train_loader, optimizer, device, pad_id, config)
         val_cls = evaluate_cls(model, val_loader, device, pad_id)
@@ -411,9 +449,9 @@ def main() -> None:
             best_val_acc = val_cls["accuracy"]
             best_epoch = epoch
             best_val_loss = combined_val_loss
-            save_checkpoint(run_dir / "checkpoints" / "best_checkpoint.pt", model, optimizer, epoch, best_val_acc, config)
+            save_checkpoint(run_dir / "checkpoints" / "best_checkpoint.pt", model, optimizer, scheduler, epoch, best_val_acc, config, extra={"best_epoch": best_epoch, "best_val_loss": best_val_loss})
             torch.save(model.state_dict(), run_dir / "checkpoints" / "best_model.pt")
-        save_checkpoint(run_dir / "checkpoints" / "last_checkpoint.pt", model, optimizer, epoch, best_val_acc, config)
+        save_checkpoint(run_dir / "checkpoints" / "last_checkpoint.pt", model, optimizer, scheduler, epoch, best_val_acc, config, extra={"best_epoch": best_epoch, "best_val_loss": best_val_loss})
         torch.save(model.state_dict(), run_dir / "checkpoints" / "last_model.pt")
 
         payload = {
@@ -444,20 +482,20 @@ def main() -> None:
     ref_embs, ref_preds = collect_embeddings(model, ref_all_loader, device, pad_id)
     qry_embs, qry_preds = collect_embeddings(model, qry_all_loader, device, pad_id)
 
-    ref_obs = reference.obs.copy()
+    ref_obs = pd.DataFrame(index=[f"ref_{idx}" for idx in reference.obs_names.astype(str)])
     ref_obs["dataset_split"] = "reference"
     ref_obs["eval_split"] = "train"
-    ref_obs.loc[ref_obs.index[val_idx], "eval_split"] = "val"
-    ref_obs["true_label"] = ref_obs["celltype"].astype("category")
+    ref_obs.iloc[val_idx, ref_obs.columns.get_loc("eval_split")] = "val"
+    ref_obs["true_label"] = pd.Categorical(reference.obs["celltype"].astype(str), categories=shared_labels)
     ref_obs["pred_label"] = pd.Categorical.from_codes(ref_preds, categories=shared_labels)
     ref_adata = reference.copy()
     ref_adata.obs = ref_obs
     ref_adata.obsm["X_scGPT"] = ref_embs
 
-    qry_obs = query.obs.copy()
+    qry_obs = pd.DataFrame(index=[f"qry_{idx}" for idx in query.obs_names.astype(str)])
     qry_obs["dataset_split"] = "query"
     qry_obs["eval_split"] = "test"
-    qry_obs["true_label"] = qry_obs["celltype"].astype("category")
+    qry_obs["true_label"] = pd.Categorical(query.obs["celltype"].astype(str), categories=shared_labels)
     qry_obs["pred_label"] = pd.Categorical.from_codes(qry_preds, categories=shared_labels)
     qry_adata = query.copy()
     qry_adata.obs = qry_obs
