@@ -1,0 +1,172 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{hyperref}
+\usepackage{array}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\graphicspath{{assets/}}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue,
+  pdfauthor={junior yu},
+  pdftitle={Cross-dataset Cell Type Annotation with scGPT on Human Gut Atlas Transfer},
+}
+
+\title{Cross-dataset Cell Type Annotation with scGPT on Human Gut Atlas Transfer}
+\author{junior yu}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We report a reproducible cross-dataset cell type annotation experiment on the human gut atlas transfer setting using scGPT.
+A reference atlas with 14{,}159 cells was used to annotate a 11{,}982-cell query atlas, with 9 shared labels and 128 shared genes after harmonization.
+The model was trained for five epochs on CPU with a lightweight scGPT transformer configuration and a checkpoint-resume pipeline that preserves completed epochs.
+The final query performance reached 18.96\% accuracy, 16.64\% balanced accuracy, 11.65\% macro-F1, 3.47\% ARI, and 5.39\% NMI.
+While the result is not yet competitive as a final benchmark claim, it establishes a complete end-to-end training, recovery, and analysis workflow for future scaling.
+\end{abstract}
+
+\section{Introduction}
+Cross-dataset cell type annotation is a practical test of whether a representation model can transfer biological structure across batches, donors, and experiments.
+In this project we turned an initial smoke test into a benchmark-style transfer run on the human gut atlas, using scGPT as the backbone model and a paired reference/query setup derived from CellTypist-style annotations.
+The goal of this paper is not to claim state-of-the-art performance, but to document a stable, reproducible baseline that can be extended into a fuller benchmark.
+
+\section{Materials and Methods}
+\subsection{Dataset}
+We used a paired gut atlas transfer task:
+\begin{itemize}[leftmargin=1.2em]
+  \item Reference atlas: 14{,}159 cells.
+  \item Query atlas: 11{,}982 cells.
+  \item Shared labels: 9 cell types.
+  \item Shared genes after HVG selection: 128.
+\end{itemize}
+
+The preprocessing pipeline normalizes counts, performs gene binning, and selects highly variable genes on the reference atlas before intersecting with the query set.
+When the default cell-ranger HVG routine encounters degenerate bin edges, the pipeline falls back to deterministic variance ranking so that the benchmark can proceed without manual intervention.
+
+\subsection{Model and training}
+We trained a lightweight scGPT transformer classifier with the following configuration:
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+Component & Setting \\
+\midrule
+Backbone & scGPT TransformerModel \\
+Hidden size ($d_{model}$) & 64 \\
+Transformer layers & 2 \\
+Attention heads & 4 \\
+Feed-forward width ($d_{hid}$) & 128 \\
+Classifier layers & 2 \\
+Input embedding style & continuous \\
+Cell embedding style & CLS \\
+MVC decoder style & inner product \\
+HVGs & 128 \\
+Bins & 51 \\
+Epochs & 5 \\
+Batch size & 128 \\
+Optimizer & AdamW \\
+Learning rate & $5\times10^{-4}$ \\
+Weight decay & $10^{-2}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Training and evaluation were run on CPU in a resumeable pipeline.
+The run stores both the latest checkpoint and the best checkpoint, allowing the job to recover after interruption without replaying completed epochs.
+The final manuscript also uses a minimal analysis export to avoid H5AD serialization failures caused by mixed-type diagnostic columns.
+
+\subsection{Evaluation}
+We report the following metrics on the query set:
+accuracy, balanced accuracy, macro-F1, ARI, and NMI.
+For visualization, we export UMAP projections colored by the ground-truth labels and the predicted labels.
+
+\section{Results}
+\subsection{Training dynamics}
+The model completed all five epochs and reached its best validation accuracy at epoch 5.
+The last validation accuracy was 43.74\%, while the final query accuracy was 18.96\%.
+The modest query accuracy indicates that the representation transfer is functioning, but the current configuration is not yet strong enough for a high-confidence benchmark claim.
+
+\subsection{Final transfer performance}
+\begin{table}[H]
+\centering
+\caption{Final query-set metrics for the gut atlas transfer experiment.}
+\begin{tabular}{lc}
+\toprule
+Metric & Value \\
+\midrule
+Accuracy & 0.1896 \\
+Balanced accuracy & 0.1664 \\
+Macro-F1 & 0.1165 \\
+ARI & 0.0347 \\
+NMI & 0.0539 \\
+Best validation accuracy & 0.4374 \\
+Best epoch & 5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Qualitative analysis}
+Figure~\ref{fig:umaps} shows the UMAP embeddings colored by true labels and predicted labels.
+The geometry is preserved, but the predicted partition remains coarse, consistent with the low macro-F1 and ARI values.
+This suggests that the current model has learned a useful shared manifold, but the class boundary assignment still requires stronger supervision, better feature selection, or a more expressive transfer strategy.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.49\linewidth}
+  \centering
+  \includegraphics[width=\linewidth]{umap_true_label.png}
+  \caption*{(a) UMAP colored by true label.}
+\end{minipage}\hfill
+\begin{minipage}{0.49\linewidth}
+  \centering
+  \includegraphics[width=\linewidth]{umap_pred_label.png}
+  \caption*{(b) UMAP colored by predicted label.}
+\end{minipage}
+\caption{UMAP projections of the combined analysis set.}
+\label{fig:umaps}
+\end{figure}
+
+\section{Discussion}
+This run should be interpreted as a stable benchmark baseline rather than a final result.
+Its main value is that the whole pipeline now works end to end: data preparation, model training, checkpoint recovery, analysis export, and figure generation.
+The current performance is constrained by the strict transfer setting, the limited overlap of 128 shared genes, and the fact that the reported result comes from a single seed.
+
+Several next steps are obvious:
+\begin{itemize}[leftmargin=1.2em]
+  \item run multiple random seeds and report mean $\pm$ standard deviation;
+  \item compare against classical baselines such as majority class, PCA+logistic regression, PCA+SVM, PCA+kNN, and Leiden;
+  \item increase the shared feature budget if the benchmark protocol allows it;
+  \item test stronger regularization or transfer-specific objectives;
+  \item expand the manuscript with ablation studies and a proper benchmark table.
+\end{itemize}
+
+\section{Conclusion}
+We converted a fragile smoke test into a reproducible gut atlas transfer benchmark and documented the first complete end-to-end result.
+The current scGPT configuration is stable and restartable, but its predictive quality is still too low for a strong benchmark claim.
+That said, the experiment establishes a clean foundation for a real paper: the pipeline is now measurable, recoverable, and ready for systematic improvement.
+
+\section*{Artifacts}
+Run directory:
+\begin{quote}
+\url{runs/annotation_smoke_retry2/gutatlas_transfer/scgpt/seed_0}
+\end{quote}
+
+Metrics source files:
+\begin{itemize}[leftmargin=1.2em]
+  \item \texttt{summary.json}
+  \item \texttt{final\_test.json}
+  \item \texttt{analysis/metrics.json}
+\end{itemize}
+
+\end{document}

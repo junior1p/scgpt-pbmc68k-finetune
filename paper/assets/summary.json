@@ -1,0 +1,18 @@
+{
+  "best_epoch": 5,
+  "best_val_acc": 0.4373822975517891,
+  "best_val_loss": Infinity,
+  "dataset": "gutatlas_transfer",
+  "final_test": {
+    "accuracy": 0.18961775997329328,
+    "ari": 0.03468901831245778,
+    "balanced_accuracy": 0.16644821340140487,
+    "macro_f1": 0.11647008593285903,
+    "nmi": 0.05389948459284643
+  },
+  "n_query": 11982,
+  "n_reference": 14159,
+  "n_shared_genes": 128,
+  "n_shared_labels": 9,
+  "run_dir": "/mnt/scgpt_trial/scgpt-pbmc68k-release/runs/annotation_smoke_retry2/gutatlas_transfer/scgpt/seed_0"
+}
