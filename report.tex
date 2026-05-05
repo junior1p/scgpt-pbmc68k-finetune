@@ -1,0 +1,195 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{setspace}
+\usepackage{amsmath}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+\title{A Technical Report on Lightweight scGPT Fine-Tuning for PBMC68k Cell-Type Classification}
+\author{Prepared from Remote Experimental Runs}
+\date{\today}
+
+\begin{document}
+\maketitle
+\onehalfspacing
+
+\begin{abstract}
+This report documents a compact scGPT fine-tuning workflow conducted on the public \texttt{scanpy} PBMC68k reduced dataset for single-cell cell-type classification. Two successful experiments were completed on a remote Linux host: (1) a baseline run initialized from scratch and (2) a follow-up run that reused the best checkpoint from the baseline under a more classification-focused objective. Both runs used a small transformer configuration (\texttt{d\_model}=64, \texttt{nlayers}=2, \texttt{hvg}=128) and were executed on CPU. The baseline achieved a best validation accuracy of 0.3429 and a final test accuracy of 0.3429 after 5 epochs. The follow-up run, although described operationally as a pretrained-style continuation, used the baseline checkpoint rather than an official external scGPT model zoo checkpoint; it preserved the same test accuracy of 0.3429 after 10 epochs while reducing the final test classification loss from 1.9761 to 1.9040. The experiments therefore demonstrate a reproducible scGPT training pipeline and modest optimization gains in loss, but no measurable classification accuracy gain under the tested low-capacity setting.
+\end{abstract}
+
+\section{Introduction}
+Foundation models for single-cell analysis have attracted substantial interest because they offer a unified representation-learning framework across heterogeneous transcriptomic tasks. scGPT is one such model family, designed to model gene-expression profiles with transformer-based sequence processing. In practical deployment, however, many users do not immediately run large-scale official checkpoints. Instead, they first validate that a local fine-tuning stack can execute end-to-end on public datasets, save checkpoints reproducibly, and produce stable metrics under constrained hardware conditions.
+
+The work summarized here belongs to that validation stage. The goal was not to claim a new state of the art, but to establish a functioning fine-tuning pipeline for scGPT on a public benchmark-like dataset and to inspect whether a simple continuation strategy could improve downstream classification behavior. The resulting experiments are best interpreted as engineering verification runs with a small model and low-resource setup.
+
+\section{Experimental Setting}
+\subsection{Dataset}
+All successful experiments used \texttt{scanpy.datasets.pbmc68k\_reduced()}, a public reduced peripheral blood mononuclear cell dataset distributed with Scanpy. Cell-type labels were taken from \texttt{bulk\_labels}. The workflow converted the dataset to its raw expression layer, attached categorical label IDs, and treated the task as supervised multi-class cell-type classification.
+
+\subsection{Preprocessing}
+The baseline script applied the following preprocessing decisions:
+\begin{itemize}
+    \item highly variable gene (HVG) selection with \texttt{subset\_hvg=128},
+    \item \texttt{hvg\_flavor=cell\_ranger},
+    \item expression binning with \texttt{n\_bins=51},
+    \item no total-count normalization,
+    \item no \texttt{log1p} transformation,
+    \item tokenization with special tokens \texttt{<pad>}, \texttt{<cls>}, and \texttt{<eoc>}.
+\end{itemize}
+
+The follow-up script preserved the same effective feature scale in the successful run because it loaded the baseline vocabulary, matched 128 of 765 genes against that vocabulary, and used \texttt{hvg=128}. Thus, although the second script supported more realistic checkpoint loading behavior, the successful continuation experiment remained tightly tied to the first run's reduced feature space.
+
+\subsection{Model and Training}
+The baseline run used a compact scGPT transformer:
+\begin{itemize}
+    \item \texttt{d\_model}=64,
+    \item \texttt{nhead}=4,
+    \item \texttt{d\_hid}=128,
+    \item \texttt{nlayers}=2,
+    \item \texttt{nlayers\_cls}=2,
+    \item dropout $=0.2$.
+\end{itemize}
+
+Training used AdamW with a stepwise learning-rate schedule and a stratified train/validation/test split. The loss combined classification cross-entropy and masked expression reconstruction:
+\[
+\mathcal{L} = \lambda_{\text{cls}}\mathcal{L}_{\text{cls}} + \lambda_{\text{mlm}}\mathcal{L}_{\text{mlm}}.
+\]
+
+In the baseline, $\lambda_{\text{cls}}=1.0$ and $\lambda_{\text{mlm}}=1.0$. In the continuation run, the same architecture was reused from the baseline checkpoint, but the optimization emphasis was shifted to classification by using $\lambda_{\text{mlm}}=0.1$ and a smaller learning rate.
+
+\subsection{Hardware Context}
+Both successful runs executed on CPU. During remote inspection, \texttt{torch.cuda.is\_available()} returned false, so these results should be understood as CPU-constrained validation experiments rather than GPU-optimized training.
+
+\section{Runs Conducted}
+\subsection{Baseline Fine-Tuning from Scratch}
+The main successful baseline run was stored under:
+\begin{quote}
+\texttt{/mnt/scgpt\_trial/runs/pbmc68k\_scgpt\_finetune\_20260427\_195037}
+\end{quote}
+
+Its saved configuration was:
+\begin{itemize}
+    \item epochs: 5
+    \item batch size: 128
+    \item learning rate: $5\times 10^{-4}$
+    \item weight decay: $10^{-2}$
+    \item mask ratio: 0.15
+    \item classification loss weight: 1.0
+    \item MLM loss weight: 1.0
+    \item HVG count: 128
+    \item random seed: 42
+\end{itemize}
+
+This run produced checkpoints, metrics, logs, a saved vocabulary, and a preprocessed \texttt{.h5ad} artifact.
+
+\subsection{Checkpoint-Initialized Continuation Run}
+The second successful run was stored under:
+\begin{quote}
+\texttt{/mnt/scgpt\_trial/runs/pbmc68k\_scgpt\_pretrained\_20260505\_180059}
+\end{quote}
+
+Despite the script's support for pretrained-style loading, this run did \emph{not} use an official external scGPT model zoo checkpoint. Instead, it loaded:
+\begin{quote}
+\texttt{/mnt/scgpt\_trial/runs/pbmc68k\_scgpt\_finetune\_20260427\_195037/checkpoints/best\_model.pt}
+\end{quote}
+
+The continuation configuration was:
+\begin{itemize}
+    \item epochs: 10
+    \item batch size: 128
+    \item learning rate: $3\times 10^{-4}$
+    \item weight decay: $10^{-2}$
+    \item mask ratio: 0.15
+    \item classification loss weight: 1.0
+    \item MLM loss weight: 0.1
+    \item HVG count: 128
+    \item device: CPU
+    \item random seed: 42
+\end{itemize}
+
+The script successfully loaded the prior run's vocabulary and matched 128 of 765 genes against it.
+
+\section{Results}
+\subsection{Run-Level Summary}
+Table~\ref{tab:summary} summarizes the two successful experiments.
+
+\begin{table}[H]
+\centering
+\caption{Summary of successful scGPT runs on PBMC68k reduced}
+\label{tab:summary}
+\begin{tabular}{p{3.8cm}cccc}
+\toprule
+Run & Epochs & Best val acc. & Final test acc. & Final test cls loss \\
+\midrule
+Baseline from scratch & 5 & 0.3429 & 0.3429 & 1.9761 \\
+Checkpoint continuation & 10 & 0.3429 & 0.3429 & 1.9040 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Epoch-Level Behavior}
+The baseline run improved quickly from a weaker first epoch to a plateau:
+\begin{itemize}
+    \item epoch 1: validation accuracy 0.1810, test accuracy 0.2095
+    \item epoch 2: validation accuracy 0.3429, test accuracy 0.3429
+    \item epochs 3--5: validation accuracy remained 0.3429
+\end{itemize}
+
+The continuation run started immediately at the plateau level and maintained it for all 10 epochs:
+\begin{itemize}
+    \item epoch 1: validation accuracy 0.3429
+    \item epochs 2--10: validation accuracy remained 0.3429
+\end{itemize}
+
+However, the continuation run steadily reduced the classification loss:
+\begin{itemize}
+    \item validation classification loss decreased from 1.9471 at epoch 1 to 1.9034 at epoch 10,
+    \item final test classification loss decreased from 1.9761 in the baseline run to 1.9040.
+\end{itemize}
+
+\subsection{Interpretation}
+The most important empirical observation is that the accuracy ceiling in this setup was reached very early and never exceeded. The second run improved optimization smoothness and loss values, but it did not change the decision boundary enough to yield a better discrete accuracy outcome. This is consistent with three constraints of the experiment:
+\begin{enumerate}
+    \item the model was intentionally small,
+    \item the effective gene vocabulary remained only 128 genes,
+    \item the ``pretrained'' continuation did not introduce new external biological knowledge because it reused the same locally trained checkpoint.
+\end{enumerate}
+
+\section{Discussion}
+These results are best understood as a pipeline validation rather than a biological performance study. The experiments show that:
+\begin{itemize}
+    \item scGPT can be fine-tuned reproducibly on a public PBMC dataset using a lightweight CPU-based workflow,
+    \item run directories can preserve scripts, configurations, metrics, checkpoints, vocabularies, and preprocessed data,
+    \item a continuation strategy with reduced MLM emphasis lowers loss but does not guarantee accuracy gains.
+\end{itemize}
+
+From a modeling perspective, the plateau at 0.3429 likely reflects limited representational capacity and limited input resolution rather than mere under-training. The HVG count of 128 is extremely small relative to realistic single-cell modeling practice. Likewise, a two-layer, 64-dimensional transformer is suitable for debugging and smoke tests, but not for extracting the full value of scGPT-style transfer learning.
+
+The attempted next step in the engineering workflow was to replace the locally recycled checkpoint with the official blood-domain scGPT checkpoint. That transfer did not complete because the jump-host path repeatedly disrupted large-file transport. This limitation is infrastructural rather than methodological, but it matters because it prevented a clean comparison between local continuation and true external pretrained initialization.
+
+\section{Limitations}
+This report has several clear limitations:
+\begin{itemize}
+    \item The dataset is a reduced public example, not a full-scale benchmark protocol.
+    \item Successful runs were executed on CPU, which constrained iteration speed and practical hyperparameter search.
+    \item The second run reused a local checkpoint rather than an official model zoo checkpoint, so it does not test genuine cross-domain transfer.
+    \item No multiple-seed aggregate was computed.
+    \item No confusion matrix, macro-F1, or class-wise recall analysis was produced.
+\end{itemize}
+
+\section{Conclusion}
+The remote experiments established a functioning, reproducible scGPT fine-tuning workflow for PBMC68k reduced cell-type classification. The baseline from-scratch run and the checkpoint-initialized continuation run both converged to a final test accuracy of 0.3429. The continuation run improved classification loss from 1.9761 to 1.9040 but did not improve accuracy. The practical conclusion is that the implemented pipeline is valid, but the tested configuration is too small and too locally self-referential to realize the intended benefits of scGPT transfer learning. A meaningful next experiment would require successful use of an official scGPT pretrained checkpoint and a larger feature/model configuration.
+
+\section*{Appendix: Exact Successful Run Directories}
+\begin{itemize}
+    \item Baseline: \texttt{/mnt/scgpt\_trial/runs/pbmc68k\_scgpt\_finetune\_20260427\_195037}
+    \item Continuation: \texttt{/mnt/scgpt\_trial/runs/pbmc68k\_scgpt\_pretrained\_20260505\_180059}
+\end{itemize}
+
+\end{document}
