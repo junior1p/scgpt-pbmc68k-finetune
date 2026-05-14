@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/banner.png" alt="scGPT Fine-tuning & Benchmark" width="100%">
+<img src="docs/banner_new.png" alt="scGPT Fine-tuning & Benchmark" width="100%">
 
 <br>
 
