@@ -1,8 +1,8 @@
-% NeurIPS 2024 style file (preprint version)
+% NeurIPS 2024 style file (arXiv preprint version)
 % Based on the standard NeurIPS LaTeX style
 
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesPackage{neurips_2024}[2024/01/01 NeurIPS 2024 submission/preprint style]
+\ProvidesPackage{neurips_2024}[2024/01/01 NeurIPS 2024 arXiv preprint style]
 
 \newif\if@preprint
 \@preprintfalse
@@ -47,13 +47,10 @@
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{0.5ex}
 
-% Header/footer
+% Header/footer — clean, no "Under review." banner
 \usepackage{fancyhdr}
 \pagestyle{fancy}
 \fancyhf{}
-\if@preprint
-  \fancyhead[C]{\small Preprint. Under review.}
-\fi
 \fancyfoot[C]{\small\thepage}
 \renewcommand{\headrulewidth}{0pt}
 
